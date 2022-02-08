@@ -1,3 +1,7 @@
+.env
+.env.*
+dashcore-node.json
+
 # Logs
 logs
 *.log

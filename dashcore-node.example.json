@@ -1,0 +1,16 @@
+{
+  "servicesConfig": {
+    "dashd": {
+      "connect": [
+        {
+          "rpchost": "127.0.0.1",
+          "_rpcport": 30521,
+          "rpcuser": "dash",
+          "rpcpassword": "local321",
+          "zmqpubrawtx": "tcp://127.0.0.1:28332"
+        }
+      ]
+    }
+  },
+  "services": ["dashd"]
+}
