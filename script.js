@@ -19,7 +19,7 @@ Script.parsePubKeyHash = function (script) {
   let opDup = script.slice(0, 2);
   let opHash = script.slice(2, 4);
   let len = script.slice(4, 6);
-  let pubKeyHash = script.slice(6, -4);
+  let p2pkh = script.slice(6, -4);
   let opEqVer = script.slice(-4, -2);
   let opChecksig = script.slice(-2);
 
@@ -41,7 +41,8 @@ Script.parsePubKeyHash = function (script) {
     throw new Error(`bad script: expected '${OP_HASH160}' but got '${opHash}'`);
   }
 
-  return pubKeyHash;
+  // pub key hash
+  return p2pkh;
 };
 
 // Test
