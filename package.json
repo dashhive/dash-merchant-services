@@ -4,6 +4,7 @@
   "description": "",
   "main": "index.js",
   "scripts": {
+    "prettier": "npx prettier@2.x -w '**/*.{js,md}'",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
@@ -11,6 +12,7 @@
   "license": "MIT",
   "dependencies": {
     "@dashevo/dashcore-node": "^6.2.3",
+    "base-x": "^3.0.9",
     "dotenv": "^16.0.0",
     "zeromq": "^5.2.8"
   }

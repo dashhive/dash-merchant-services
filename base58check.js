@@ -1,4 +1,4 @@
-`use strict`;
+"use strict";
 
 // See also:
 // - https://en.bitcoin.it/wiki/Base58Check_encoding
@@ -7,6 +7,9 @@
 let Base58Check = module.exports;
 
 let Crypto = require(`crypto`);
+
+var BASE58 = `123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz`;
+var bs58 = require(`base-x`)(BASE58);
 
 Base58Check.checksum = function (parts) {
   let buf = Buffer.from(`${parts.version}${parts.pubKeyHash}`, `hex`);
@@ -17,8 +20,14 @@ Base58Check.checksum = function (parts) {
   return check;
 };
 
-Base58Check.verify = function (base58check) {
-  let parts = Base58Check.decode(base58check);
+Base58Check.verify = function (b58Addr) {
+  let buf = bs58.decode(b58Addr);
+  let hex = buf.toString(`hex`);
+  return Base58Check.verifyHex(hex);
+};
+
+Base58Check.verifyHex = function (base58check) {
+  let parts = Base58Check.decodeHex(base58check);
   let check = Base58Check.checksum(parts);
 
   if (parts.check !== check) {
@@ -28,8 +37,14 @@ Base58Check.verify = function (base58check) {
   return parts;
 };
 
+Base58Check.decode = function (b58Addr) {
+  let buf = bs58.decode(b58Addr);
+  let hex = buf.toString(`hex`);
+  return Base58Check.decodeHex(hex);
+};
+
 // decode Base58Check
-Base58Check.decode = function (addr) {
+Base58Check.decodeHex = function (addr) {
   if (50 !== addr.length) {
     throw new Error(
       `pubKeyHash isn't as long as expected (should be 50 chars, not ${addr.length})`
@@ -37,7 +52,7 @@ Base58Check.decode = function (addr) {
   }
 
   let version = addr.slice(0, 2);
-  if ("4c" !== version) {
+  if (`4c` !== version) {
     throw new Error(
       `expected Dash pubKeyHash to start with 0x42, not '0x${version}'`
     );
@@ -52,6 +67,12 @@ Base58Check.decode = function (addr) {
 };
 
 Base58Check.encode = function (parts) {
+  let hex = Base58Check.encodeHex(parts);
+  let buf = Buffer.from(hex, `hex`);
+  return bs58.encode(buf);
+};
+
+Base58Check.encodeHex = function (parts) {
   let check = Base58Check.checksum(parts);
   return `${parts.version}${parts.pubKeyHash}${check}`;
 };
@@ -59,10 +80,18 @@ Base58Check.encode = function (parts) {
 // Test
 if (require.main === module) {
   console.info(`Test that it all works as expected...`);
-  let addr = `4c 1a2e668007a28dbecb420a8e9ce8cdd1651f213d 6496ad2a`.replace(
-    /\s*/g,
-    ""
-  );
+  let reference = `Xd5GzCN6mp77BeVEe6FrgqQt8MA1ge4Fsw`;
+  let hex = `4c 1a2e668007a28dbecb420a8e9ce8cdd1651f213d 6496ad2a`;
+  hex = hex.replace(/\s*/g, ``);
+
+  let bufAddr = Buffer.from(hex, `hex`);
+  let addr = bs58.encode(bufAddr);
+  if (addr !== reference) {
+    throw new Error(
+      "[SANITY FAIL] the universe no longer obeys the law of base58"
+    );
+  }
+
   let parts = Base58Check.verify(addr);
   console.info(`\t` + JSON.stringify(parts));
 
