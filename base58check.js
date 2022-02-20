@@ -11,6 +11,8 @@ let Crypto = require(`crypto`);
 var BASE58 = `123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz`;
 var bs58 = require(`base-x`)(BASE58);
 
+let dashVersion = `4c`;
+
 Base58Check.checksum = function (parts) {
   let buf = Buffer.from(`${parts.version}${parts.pubKeyHash}`, `hex`);
   let hash1 = Crypto.createHash(`sha256`).update(buf).digest();
@@ -52,7 +54,7 @@ Base58Check.decodeHex = function (addr) {
   }
 
   let version = addr.slice(0, 2);
-  if (`4c` !== version) {
+  if (dashVersion !== version) {
     throw new Error(
       `expected Dash pubKeyHash to start with 0x42, not '0x${version}'`
     );

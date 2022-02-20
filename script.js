@@ -1,4 +1,4 @@
-`use strict`;
+"use strict";
 
 // Solves the problem of finding the address to which some satoshis were sent
 // https://stackoverflow.com/questions/50456055/why-does-bitcore-lib-not-decode-my-bitcoin-transaction-hex-correctly

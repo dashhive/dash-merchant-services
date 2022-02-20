@@ -19,3 +19,11 @@ rsync -avhP ./dashcore-node.example.json ./dashcore-node.json
 npm ci
 npm run start
 ```
+
+To create a webhook token scoped to certain allowed hostnames:
+
+```bash
+node ./bin/gentoken.js example.com,example.net
+```
+
+Then give the `dwh_` part to the customer, and save the line in `./tokens.json`.
