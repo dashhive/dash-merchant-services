@@ -64,14 +64,26 @@ node.on("ready", function () {
       }
 
       console.info(`Target: ${out.satoshis} => ${p2pkh}`);
-      await request({
+      let req = {
         timeout: defaultWebhookTimeout,
+        auth: {
+          username: account.username,
+          password: account.password,
+        },
         url: account.url,
         json: { address: account.address, satoshis: out.satoshis },
-      }).catch(function (e) {
-        console.error(`Webhook Failed:`);
-        console.error(e.message || e.stack);
-      });
+      };
+      await request(req)
+        .then(function (resp) {
+          if (!resp.ok) {
+            console.error(resp.toJSON());
+            throw new Error("bad response from webhook");
+          }
+        })
+        .catch(function (e) {
+          console.error(`Webhook Failed:`);
+          console.error(e.message || e.stack);
+        });
     });
 
     // TODO calc the fee just for fun
@@ -146,10 +158,10 @@ app.post("/api/webhooks", auth, async function (req, res) {
 
   await request({
     timeout: defaultWebhookTimeout,
-    url: req.body.url,
+    url: data.url,
     auth: {
-      user: url.username,
-      pass: url.password,
+      username: url.username,
+      password: url.password,
     },
     json: {
       address: data.address,
@@ -193,6 +205,8 @@ app.post("/api/webhooks", auth, async function (req, res) {
   registeredAddresses[addr.pubKeyHash] = {
     ts: Date.now(),
     address: data.address,
+    username: url.username,
+    password: url.password,
     url: data.url,
   };
   console.log("DEBUG", addr.pubKeyHash, registeredAddresses);
