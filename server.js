@@ -38,57 +38,67 @@ function getRegistered(p2pkh) {
 }
 
 node.on("ready", function () {
-  node.services.dashd.on("tx", function (txData) {
-    // a new transaction has entered the mempool
-    //console.log("txData", txData);
-    let tx = new dashcore.lib.Transaction(txData);
-    //let json = JSON.stringify(tx, null, 2);
-    //console.log("tx:", json);
+  node.services.dashd.on("txlock", createTxListener("txlock"));
+  //node.services.dashd.on("tx", createTxListener("tx    "));
 
-    tx.outputs.some(async function (output) {
-      let out = output.toJSON();
+  function createTxListener(label) {
+    return function (txData) {
+      // a new transaction has entered the mempool
+      //console.log("txData", txData);
+      let tx = new dashcore.lib.Transaction(txData);
+      //let json = JSON.stringify(tx, null, 2);
+      //console.log("tx:", json);
 
-      let script = out.script.toString();
-      let p2pkh;
-      try {
-        p2pkh = Script.parsePubKeyHash(script);
-      } catch (e) {
-        return;
-      }
+      tx.outputs.some(async function (output) {
+        let out = output.toJSON();
 
-      //console.log(`DEBUG: ${out.satoshis} => ${p2pkh}`);
+        let script = out.script.toString();
+        let p2pkh;
+        try {
+          p2pkh = Script.parsePubKeyHash(script);
+        } catch (e) {
+          return;
+        }
 
-      let account = getRegistered(p2pkh);
-      if (!account) {
-        return;
-      }
-
-      console.info(`Target: ${out.satoshis} => ${p2pkh}`);
-      let req = {
-        timeout: defaultWebhookTimeout,
-        auth: {
-          username: account.username,
-          password: account.password,
-        },
-        url: account.url,
-        json: { address: account.address, satoshis: out.satoshis },
-      };
-      await request(req)
-        .then(function (resp) {
-          if (!resp.ok) {
-            console.error(resp.toJSON());
-            throw new Error("bad response from webhook");
-          }
-        })
-        .catch(function (e) {
-          console.error(`Webhook Failed:`);
-          console.error(e.message || e.stack);
+        let payAddr = Base58Check.encode({
+          version: `4c`,
+          pubKeyHash: p2pkh,
         });
-    });
+        console.log(`[${label}] DEBUG: ${out.satoshis} => ${payAddr}`);
 
-    // TODO calc the fee just for fun
-    // fee = sum(inputs) - sum(outputs)
-  });
+        let account = getRegistered(p2pkh);
+        if (!account) {
+          return;
+        }
+
+        console.info(`[${label}] Target: ${out.satoshis} => ${payAddr}`);
+        let req = {
+          timeout: defaultWebhookTimeout,
+          auth: {
+            username: account.username,
+            password: account.password,
+          },
+          url: account.url,
+          json: { address: account.address, satoshis: out.satoshis },
+        };
+        await request(req)
+          .then(function (resp) {
+            if (!resp.ok) {
+              console.error(`[${label}] not OK:`);
+              console.error(resp.toJSON());
+              throw new Error("bad response from webhook");
+            }
+          })
+          .catch(function (e) {
+            console.error(`[${label}] Webhook Failed:`);
+            console.error(e.message || e.stack);
+          });
+      });
+
+      // TODO calc the fee just for fun
+      // fee = sum(inputs) - sum(outputs)
+    };
+  }
 });
 
 function auth(req, res, next) {
@@ -126,6 +136,7 @@ app.post("/api/webhooks", auth, async function (req, res) {
     url: req.body.url,
     address: req.body.address,
   };
+  let webhookUrl = req.body.url;
   let account = req.account;
 
   let url;
@@ -193,7 +204,7 @@ app.post("/api/webhooks", auth, async function (req, res) {
   // fn: test that invalid auth fails
   await request({
     timeout: defaultWebhookTimeout,
-    url: req.body.url,
+    url: webhookUrl,
     json: { address: data.address, satoshis: 0 },
   }).then(function (resp) {
     if (resp.ok) {
@@ -232,6 +243,7 @@ function cleanup() {
     if (registeredAddresses[key].ts > freshtime) {
       return;
     }
+    console.log("[DEBUG] delete", registeredAddresses[key]);
     delete registeredAddresses[key];
   });
 }

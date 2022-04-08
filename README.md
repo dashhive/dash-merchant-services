@@ -20,6 +20,22 @@ npm ci
 npm run start
 ```
 
+## API
+
+```txt
+POST /api/webhooks
+Bearer my-api-access-token
+{
+    url: "https://user@my-super-long-token:example.com/api/dash/payment-received",
+    address: "Xxxxxxxxxxxxxxxxxxx",
+}
+
+{
+    url: "https://user@my-s*************en:example.com/api/dash/payment-received",
+    address: "Xxxxxxxxxxxxxxxxxxx",
+}
+```
+
 To create a webhook token scoped to certain allowed hostnames:
 
 ```bash
