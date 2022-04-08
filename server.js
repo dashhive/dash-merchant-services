@@ -38,16 +38,18 @@ function getRegistered(p2pkh) {
 }
 
 node.on("ready", function () {
+  node.services.dashd.on("tx", createTxListener("tx"));
   node.services.dashd.on("txlock", createTxListener("txlock"));
   //node.services.dashd.on("tx", createTxListener("tx    "));
 
-  function createTxListener(label) {
+  function createTxListener(evname) {
     return function (txData) {
       // a new transaction has entered the mempool
       //console.log("txData", txData);
       let tx = new dashcore.lib.Transaction(txData);
+
       //let json = JSON.stringify(tx, null, 2);
-      //console.log("tx:", json);
+      //console.log(`DEBUG [${evname}] tx:`, json);
 
       tx.outputs.some(async function (output) {
         let out = output.toJSON();
@@ -64,14 +66,14 @@ node.on("ready", function () {
           version: `4c`,
           pubKeyHash: p2pkh,
         });
-        console.log(`[${label}] DEBUG: ${out.satoshis} => ${payAddr}`);
+        console.log(`[${evname}] DEBUG: ${out.satoshis} => ${payAddr}`);
 
         let account = getRegistered(p2pkh);
         if (!account) {
           return;
         }
 
-        console.info(`[${label}] Target: ${out.satoshis} => ${payAddr}`);
+        console.info(`[${evname}] Target: ${out.satoshis} => ${payAddr}`);
         let req = {
           timeout: defaultWebhookTimeout,
           auth: {
@@ -79,18 +81,24 @@ node.on("ready", function () {
             password: account.password,
           },
           url: account.url,
-          json: { address: account.address, satoshis: out.satoshis },
+          json: {
+            txid: tx.hash,
+            event: evname,
+            instantsend: "txlock" === evname,
+            address: account.address,
+            satoshis: out.satoshis,
+          },
         };
         await request(req)
           .then(function (resp) {
             if (!resp.ok) {
-              console.error(`[${label}] not OK:`);
+              console.error(`[${evname}] not OK:`);
               console.error(resp.toJSON());
               throw new Error("bad response from webhook");
             }
           })
           .catch(function (e) {
-            console.error(`[${label}] Webhook Failed:`);
+            console.error(`[${evname}] Webhook Failed:`);
             console.error(e.message || e.stack);
           });
       });
