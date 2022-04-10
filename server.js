@@ -271,6 +271,26 @@ app.get("/api/mnlist", async function (req, res) {
   }
 });
 
+app.get("/api/mnlist-testnet", async function (req, res) {
+  res.setHeader("Content-Type", "application/json");
+
+  let replied = false;
+  if (mninfo.tnlistTxt) {
+    res.end(mninfo.tnlistTxt);
+    replied = true;
+  }
+
+  if (mninfo.isFresh()) {
+    return;
+  }
+
+  await mninfo.update();
+
+  if (!replied) {
+    res.end(mninfo.tnlistTxt);
+  }
+});
+
 mninfo.isFresh = function () {
   let now = Date.now();
   let fresh = now - mninfo.updatedAt < 15 * 60 * 1000;
@@ -279,7 +299,7 @@ mninfo.isFresh = function () {
 
 mninfo.update = async function () {
   let homedir = Os.homedir();
-  let conf = `${homedir}/.dashcore.mainnet/dash.conf`;
+  let conf = `${homedir}/${process.env.DASHD_CONF}`;
   let out = await exec("dash-cli", [
     `-conf=${conf}`,
     "masternodelist",
@@ -288,6 +308,20 @@ mninfo.update = async function () {
   ]);
   mninfo.mnlistTxt = JSON.stringify(JSON.parse(out.stdout), null, 2);
   mninfo.updatedAt = Date.now();
+  await mninfo.updateTestnet().catch(console.error);
+};
+
+mninfo.updateTestnet = async function () {
+  let homedir = Os.homedir();
+  let conf = `${homedir}/${process.env.DASHD_TESTNET_CONF}`;
+  let out = await exec("dash-cli", [
+    "-testnet",
+    `-conf=${conf}`,
+    "masternodelist",
+    "json",
+    "ENABLED",
+  ]);
+  mninfo.tnlistTxt = JSON.stringify(JSON.parse(out.stdout), null, 2);
 };
 
 async function exec(exe, args) {
