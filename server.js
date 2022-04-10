@@ -7,17 +7,21 @@ require("dotenv").config({ path: ".env.secret" });
 // https://github.com/dashevo/dashcore-node/blob/master/README.md
 
 let Path = require("path");
-let request = require("@root/request");
+let Os = require("os");
+let spawn = require("child_process").spawn;
 
 let TokenMap = require("./tokens.json");
 let GenToken = require("./lib/gentoken.js");
 let Script = require("./script.js");
 let Base58Check = require("./base58check.js");
 
+let request = require("@root/request");
 let bodyParser = require("body-parser");
 let app = require("@root/async-router").Router();
 let express = require("express");
 let server = express();
+
+server.set("json spaces", 2);
 server.use("/", app);
 
 let dashcore = require("@dashevo/dashcore-node");
@@ -244,6 +248,79 @@ app.post("/api/webhooks", auth, async function (req, res) {
   // TODO set this on an weak-ref interval?
   cleanup();
 });
+
+let mninfo = {};
+
+app.get("/api/mnlist", async function (req, res) {
+  res.setHeader("Content-Type", "application/json");
+
+  let replied = false;
+  if (mninfo.mnlistTxt) {
+    res.end(mninfo.mnlistTxt);
+    replied = true;
+  }
+
+  if (mninfo.isFresh()) {
+    return;
+  }
+
+  await mninfo.update();
+
+  if (!replied) {
+    res.end(mninfo.mnlistTxt);
+  }
+});
+
+mninfo.isFresh = function () {
+  let now = Date.now();
+  let fresh = now - mninfo.updatedAt < 15 * 60 * 1000;
+  return fresh;
+};
+
+mninfo.update = async function () {
+  let homedir = Os.homedir();
+  let conf = `${homedir}/.dashcore.mainnet/dash.conf`;
+  let out = await exec("dash-cli", [
+    `-conf=${conf}`,
+    "masternodelist",
+    "json",
+    "ENABLED",
+  ]);
+  mninfo.mnlistTxt = JSON.stringify(JSON.parse(out.stdout), null, 2);
+  mninfo.updatedAt = Date.now();
+};
+
+async function exec(exe, args) {
+  return new Promise(function (resolve, reject) {
+    let cmd = spawn(exe, args);
+
+    let stdout = [];
+    let stderr = [];
+
+    cmd.stdout.on("data", function (data) {
+      stdout.push(data.toString("utf8"));
+    });
+
+    cmd.stderr.on("data", function (data) {
+      stderr.push(data.toString("utf8"));
+    });
+
+    cmd.on("close", function (code) {
+      let result = {
+        code: code,
+        stdout: stdout.join(""),
+        stderr: stderr.join(""),
+      };
+
+      if (!code) {
+        resolve(result);
+        return;
+      }
+
+      reject(result);
+    });
+  });
+}
 
 function cleanup() {
   let freshtime = Date.now() - staleAge;
