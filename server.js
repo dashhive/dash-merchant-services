@@ -15,7 +15,7 @@ let GenToken = require("./lib/gentoken.js");
 let Script = require("./script.js");
 let Base58Check = require("./base58check.js");
 
-let request = require("@root/request");
+let request = require("./lib/request.js");
 let bodyParser = require("body-parser");
 let app = require("@root/async-router").Router();
 let express = require("express");
@@ -32,14 +32,16 @@ let node = dashcore.scaffold.start({
   config: config,
 });
 
-let defaultWebhookTimeout = 5 * 1000;
-let defaultStaleAge = 15 * 60 * 1000;
-let staleAge = parseInt(process.env.STALE_AGE, 10) || defaultStaleAge;
-let registeredAddresses = {};
+let staleAge = parseInt(process.env.STALE_AGE, 10);
+let HooksDb = require("./hooks-db.js").create({
+  staleAge,
+});
 
-function getRegistered(p2pkh) {
-  return registeredAddresses[p2pkh];
-}
+let defaultWebhookTimeout = 5 * 1000;
+let Hooks = require("./webhooks.js").create({
+  defaultWebhookTimeout,
+  Db: HooksDb,
+});
 
 node.on("ready", function () {
   node.services.dashd.on("tx", createTxListener("tx"));
@@ -72,7 +74,7 @@ node.on("ready", function () {
         });
         console.log(`[${evname}] DEBUG: ${out.satoshis} => ${payAddr}`);
 
-        let account = getRegistered(p2pkh);
+        let account = HooksDb.getByPubKeyHash(p2pkh);
         if (!account) {
           return;
         }
@@ -90,6 +92,7 @@ node.on("ready", function () {
             event: evname,
             instantsend: "txlock" === evname,
             address: account.address,
+            // TODO duffs
             satoshis: out.satoshis,
           },
         };
@@ -135,162 +138,15 @@ function auth(req, res, next) {
   next();
 }
 
-app.use(
-  "/api",
-  bodyParser.json({
-    limit: "100kb",
-    strict: true,
-  })
-);
+app.use("/api", bodyParser.json({ limit: "100kb", strict: true }));
+app.post("/api/webhooks", auth, Hooks.register);
 
-app.post("/api/webhooks", auth, async function (req, res) {
-  let data = {
-    url: req.body.url,
-    address: req.body.address,
-  };
-  let webhookUrl = req.body.url;
-  let account = req.account;
+app.get("/api/mnlist", rListServiceNodes);
+app.get("/api/mnlist-testnet", rListTestServiceNodes);
 
-  let url;
-  try {
-    url = new URL(data.url);
-  } catch (e) {
-    throw new Error(`BAD_REQUEST: invalid webhook url '${data.url}'`);
-  }
-  if (!account.hostnames.includes(url.hostname)) {
-    throw new Error(`BAD_REQUEST: untrusted hostname '${url.hostname}'`);
-  }
-  if ("https:" !== url.protocol) {
-    throw new Error(`BAD_REQUEST: insecure webhook url '${url.protocol}'`);
-  }
-
-  let addr;
-  try {
-    addr = Base58Check.verify(data.address);
-  } catch (e) {
-    throw new Error("BAD_REQUEST: invalid dash address");
-  }
-
-  // fn: test that valid auth succeeds
-  if (!url.username) {
-    url.username = "dwh";
-  }
-  if (!url.password) {
-    url.password = req.token;
-  }
-
-  await request({
-    timeout: defaultWebhookTimeout,
-    url: data.url,
-    auth: {
-      username: url.username,
-      password: url.password,
-    },
-    json: {
-      address: data.address,
-      satoshis: 0,
-    },
-  })
-    .then(function (resp) {
-      if (!resp.ok) {
-        throw new Error(
-          `BAD_REQUEST: webhook test did not respond with 2xx OK: ${resp.statusCode}`
-        );
-      }
-      if (0 !== resp.body.satoshis) {
-        throw new Error(
-          `BAD_REQUEST: webhook test did not respond with Content-Type: application/json and '{ "satoshis": 0 }'`
-        );
-      }
-      return resp;
-    })
-    .catch(function (e) {
-      if (e.message.startsWith("BAD_REQUEST:")) {
-        throw e;
-      }
-      throw new Error(
-        `BAD_REQUEST: webhook test failed network connection: ${e.message}`
-      );
-    });
-
-  // fn: test that invalid auth fails
-  await request({
-    timeout: defaultWebhookTimeout,
-    url: webhookUrl,
-    json: { address: data.address, satoshis: 0 },
-  }).then(function (resp) {
-    if (resp.ok) {
-      throw new Error("BAD_REQUEST: unauthenticated webhook test did not fail");
-    }
-  });
-
-  // Note: we can only have one webhook per address this way:
-  registeredAddresses[addr.pubKeyHash] = {
-    ts: Date.now(),
-    address: data.address,
-    username: url.username,
-    password: url.password,
-    url: data.url,
-  };
-  console.log("DEBUG", addr.pubKeyHash, registeredAddresses);
-
-  if (url.password) {
-    let prefix = url.password.slice(0, 4);
-    let mask = "*".repeat(url.password.length - 6);
-    let last2 = url.password.slice(-2);
-    url.password = `${prefix}${mask}${last2}`;
-  }
-  res.json({
-    url: url.toString(),
-    address: data.address,
-  });
-
-  // TODO set this on an weak-ref interval?
-  cleanup();
-});
+app.use("/api", finalErrorHandler);
 
 let mninfo = {};
-
-app.get("/api/mnlist", async function (req, res) {
-  res.setHeader("Content-Type", "application/json");
-
-  let replied = false;
-  if (mninfo.mnlistTxt) {
-    res.end(mninfo.mnlistTxt);
-    replied = true;
-  }
-
-  if (mninfo.isFresh()) {
-    return;
-  }
-
-  await mninfo.update();
-
-  if (!replied) {
-    res.end(mninfo.mnlistTxt);
-  }
-});
-
-app.get("/api/mnlist-testnet", async function (req, res) {
-  res.setHeader("Content-Type", "application/json");
-
-  let replied = false;
-  if (mninfo.tnlistTxt) {
-    res.end(mninfo.tnlistTxt);
-    replied = true;
-  }
-
-  if (mninfo.isFresh()) {
-    return;
-  }
-
-  await mninfo.update();
-
-  if (!replied) {
-    res.end(mninfo.tnlistTxt);
-  }
-});
-
 mninfo.isFresh = function () {
   let now = Date.now();
   let fresh = now - mninfo.updatedAt < 15 * 60 * 1000;
@@ -324,6 +180,46 @@ mninfo.updateTestnet = async function () {
   mninfo.tnlistTxt = JSON.stringify(JSON.parse(out.stdout), null, 2);
 };
 
+async function rListServiceNodes(req, res) {
+  res.setHeader("Content-Type", "application/json");
+
+  let replied = false;
+  if (mninfo.mnlistTxt) {
+    res.end(mninfo.mnlistTxt);
+    replied = true;
+  }
+
+  if (mninfo.isFresh()) {
+    return;
+  }
+
+  await mninfo.update();
+
+  if (!replied) {
+    res.end(mninfo.mnlistTxt);
+  }
+}
+
+async function rListTestServiceNodes(req, res) {
+  res.setHeader("Content-Type", "application/json");
+
+  let replied = false;
+  if (mninfo.tnlistTxt) {
+    res.end(mninfo.tnlistTxt);
+    replied = true;
+  }
+
+  if (mninfo.isFresh()) {
+    return;
+  }
+
+  await mninfo.update();
+
+  if (!replied) {
+    res.end(mninfo.tnlistTxt);
+  }
+}
+
 async function exec(exe, args) {
   return new Promise(function (resolve, reject) {
     let cmd = spawn(exe, args);
@@ -356,25 +252,14 @@ async function exec(exe, args) {
   });
 }
 
-function cleanup() {
-  let freshtime = Date.now() - staleAge;
-  Object.keys(registeredAddresses).forEach(function (key) {
-    if (registeredAddresses[key].ts > freshtime) {
-      return;
-    }
-    console.log("[DEBUG] delete", registeredAddresses[key]);
-    delete registeredAddresses[key];
-  });
-}
-
-app.use("/api", function (err, req, res, next) {
+function finalErrorHandler(err, req, res, next) {
   res.statusCode = 400;
   res.json({
     status: err.status,
     code: err.code,
     message: err.message,
   });
-});
+}
 
 // TODO
 // Register an address and a webhook
