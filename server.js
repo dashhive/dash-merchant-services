@@ -37,16 +37,14 @@ let HooksDb = require("./hooks-db.js").create({
   staleAge,
 });
 
-let defaultWebhookTimeout = 5 * 1000;
 let Hooks = require("./webhooks.js").create({
-  defaultWebhookTimeout,
+  defaultWebhookTimeout: 5 * 1000,
   Db: HooksDb,
 });
 
 node.on("ready", function () {
-  node.services.dashd.on("tx", createTxListener("tx"));
+  //node.services.dashd.on("tx", createTxListener("tx"));
   node.services.dashd.on("txlock", createTxListener("txlock"));
-  //node.services.dashd.on("tx", createTxListener("tx    "));
 
   function createTxListener(evname) {
     return function (txData) {
@@ -74,40 +72,15 @@ node.on("ready", function () {
         });
         console.log(`[${evname}] DEBUG: ${out.satoshis} => ${payAddr}`);
 
-        let account = HooksDb.getByPubKeyHash(p2pkh);
-        if (!account) {
-          return;
-        }
-
-        console.info(`[${evname}] Target: ${out.satoshis} => ${payAddr}`);
-        let req = {
-          timeout: defaultWebhookTimeout,
-          auth: {
-            username: account.username,
-            password: account.password,
-          },
-          url: account.url,
-          json: {
-            txid: tx.hash,
-            event: evname,
-            instantsend: "txlock" === evname,
-            address: account.address,
-            // TODO duffs
-            satoshis: out.satoshis,
-          },
-        };
-        await request(req)
-          .then(function (resp) {
-            if (!resp.ok) {
-              console.error(`[${evname}] not OK:`);
-              console.error(resp.toJSON());
-              throw new Error("bad response from webhook");
-            }
-          })
-          .catch(function (e) {
-            console.error(`[${evname}] Webhook Failed:`);
-            console.error(e.message || e.stack);
-          });
+        await Hooks.send(payAddr, {
+          event: evname,
+          txid: tx.hash,
+          satoshis: out.satoshis,
+          p2pkh,
+        }).catch(function (e) {
+          console.error(`[${evname}] Webhook Failed:`);
+          console.error(e.message || e.stack);
+        });
       });
 
       // TODO calc the fee just for fun

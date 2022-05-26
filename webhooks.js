@@ -5,14 +5,16 @@ let request = require("./lib/request.js");
 
 let Hooks = module.exports;
 
-Hooks.create = function ({ defaultWebhookTimeout, Db }) {
+Hooks.create = function ({ defaultWebhookTimeout = 5 * 1000, Db }) {
   let hooks = {};
+
   hooks.register = async function (req, res) {
     let data = {
       url: req.body.url,
       address: req.body.address,
     };
     let webhookUrl = req.body.url;
+    // TODO
     let account = req.account;
 
     let url;
@@ -21,6 +23,7 @@ Hooks.create = function ({ defaultWebhookTimeout, Db }) {
     } catch (e) {
       throw new Error(`BAD_REQUEST: invalid webhook url '${data.url}'`);
     }
+    // TODO
     if (!account.hostnames.includes(url.hostname)) {
       throw new Error(`BAD_REQUEST: untrusted hostname '${url.hostname}'`);
     }
@@ -114,6 +117,55 @@ Hooks.create = function ({ defaultWebhookTimeout, Db }) {
 
     // TODO set this on an weak-ref interval?
     await Db.cleanup();
+  };
+
+  //let msg = { event: evname, txid: tx.hash, satoshis: out.satoshis };
+  hooks.send = async function (payaddr, { event, txid, satoshis, p2pkh }) {
+    let hook;
+    if (p2pkh) {
+      hook = await Db.getByPubKeyHash(p2pkh);
+    } else {
+      hook = await Db.get(payaddr);
+    }
+    if (!hook) {
+      return;
+    }
+
+    let evname = event;
+    let out = {
+      satoshis: satoshis,
+    };
+    let tx = {
+      hash: txid,
+    };
+
+    console.info(`[${evname}] Target: ${out.satoshis} => ${payaddr}`);
+    let req = {
+      timeout: defaultWebhookTimeout,
+      auth: {
+        username: hook.username,
+        password: hook.password,
+      },
+      url: hook.url,
+      json: {
+        txid: tx.hash,
+        event: evname,
+        instantsend: "txlock" === event,
+        address: hook.address,
+        // TODO duffs
+        satoshis: out.satoshis,
+      },
+    };
+
+    await request(req).then(function (resp) {
+      if (resp.ok) {
+        return resp;
+      }
+
+      console.error(`[${evname}] not OK:`);
+      console.error(resp.toJSON());
+      throw new Error("bad response from webhook");
+    });
   };
 
   return hooks;
