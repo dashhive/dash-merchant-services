@@ -13,6 +13,7 @@
   "dependencies": {
     "@dashevo/dashcore-node": "^6.2.3",
     "@root/async-router": "^1.0.10",
+    "@root/base58check": "^1.0.0",
     "@root/request": "^1.8.1",
     "base-x": "^3.0.9",
     "base62-token": "^1.1.1",

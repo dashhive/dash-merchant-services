@@ -1,7 +1,9 @@
 "use strict";
 
-let Base58Check = require("./base58check.js");
 let request = require("./lib/request.js");
+let Base58Check = require("@root/base58check").Base58Check;
+
+let b58c = Base58Check.create();
 
 let Hooks = module.exports;
 
@@ -33,7 +35,7 @@ Hooks.create = function ({ defaultWebhookTimeout = 5 * 1000, Db }) {
 
     let addr;
     try {
-      addr = Base58Check.verify(data.address);
+      addr = await b58c.verify(data.address);
     } catch (e) {
       throw new Error("BAD_REQUEST: invalid dash address");
     }
@@ -96,7 +98,7 @@ Hooks.create = function ({ defaultWebhookTimeout = 5 * 1000, Db }) {
     await Db.set({
       ts: Date.now(),
       address: data.address,
-      pubKeyHash: addr,
+      pubKeyHash: addr.pubKeyHash,
       username: url.username,
       password: url.password,
       url: data.url,
@@ -140,6 +142,8 @@ Hooks.create = function ({ defaultWebhookTimeout = 5 * 1000, Db }) {
     };
 
     console.info(`[${evname}] Target: ${out.satoshis} => ${payaddr}`);
+    //console.log("DEBUG", payaddr, { event, txid, satoshis, p2pkh });
+    //console.log("DEBUG hook", hook);
     let req = {
       timeout: defaultWebhookTimeout,
       auth: {

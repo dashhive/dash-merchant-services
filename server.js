@@ -70,7 +70,7 @@ node.on("ready", function () {
           version: `4c`,
           pubKeyHash: p2pkh,
         });
-        console.log(`[${evname}] DEBUG: ${out.satoshis} => ${payAddr}`);
+        //console.log(`[${evname}] DEBUG: ${out.satoshis} => ${payAddr}`);
 
         await Hooks.send(payAddr, {
           event: evname,
