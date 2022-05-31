@@ -13,9 +13,9 @@ let spawn = require("child_process").spawn;
 let TokenMap = require("./tokens.json");
 let GenToken = require("./lib/gentoken.js");
 let Script = require("./script.js");
-let Base58Check = require("./base58check.js");
+let Base58Check = require("@root/base58check").Base58Check;
+let b58c = Base58Check.create();
 
-let request = require("./lib/request.js");
 let bodyParser = require("body-parser");
 let app = require("@root/async-router").Router();
 let express = require("express");
@@ -66,7 +66,7 @@ node.on("ready", function () {
           return;
         }
 
-        let payAddr = Base58Check.encode({
+        let payAddr = await b58c.encode({
           version: `4c`,
           pubKeyHash: p2pkh,
         });
