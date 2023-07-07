@@ -17,6 +17,7 @@ let GenToken = require("./lib/gentoken.js");
 
 let Events = require("./events.js");
 
+let DashTx = require("./parse-tx.js");
 let RpcClient = require("@dashevo/dashd-rpc/promise");
 let bodyParser = require("body-parser");
 let app = require("@root/async-router").Router();
@@ -95,6 +96,7 @@ void Events.create({
   handler: createTxListener("rawtxlock"),
 });
 
+let parses = Promise.resolve();
 function createTxListener(evname) {
   return async function (err, type, value) {
     if (err) {
@@ -102,13 +104,25 @@ function createTxListener(evname) {
       return;
     }
 
-    if (type !== evname) {
-      console.info(`[monitor] ${type}`);
+    let typename = type.toString();
+    if (typename !== evname) {
+      console.info(
+        `[monitor] ${type} (${typeof type}) !== ${evname} (${typeof evname})`
+      );
       return;
     }
 
     console.info(`[monitor] ${type}:`);
     console.info(value);
+
+    parses = parses
+      .then(async function () {
+        await DashTx.parse(value);
+      })
+      .catch(function () {
+        console.warn("ignoring script that could not be parsed");
+      });
+    await parses;
 
     // a new transaction has entered the mempool
     //console.log("txData", txData);

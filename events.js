@@ -8,14 +8,14 @@ Events.create = async function create({ url, handler }) {
   // replaces `let zmqSubSocket = zmq.socket("sub");`
   let sock = new Zmq.Subscriber();
 
-  console.log(`ZeroMQ Subscriber connecting to '${url}'`);
+  console.info(`ZeroMQ Subscriber connecting to '${url}'`);
   void monitor({ sock, handler });
 
   sock.connect(url);
-  console.log("[connect]");
+  console.info("[connect]");
 
   sock.subscribe("rawtxlock");
-  console.log("[subscribe]");
+  console.info("[subscribe]");
 
   // receive() is in c++ land
   // https://github.com/zeromq/zeromq.js/blob/62f6e252f530ea05c86be15b06a58214eac1b34d/src/socket.cc#L307
@@ -33,22 +33,26 @@ Events.create = async function create({ url, handler }) {
     } catch (e) {
         throw e;
     }
-    */
+  */
 
   for (;;) {
-    let [topic, msg] = await sock.receive().catch(errorToMessage);
-    if (topic.length === 0) {
+    let [topicBuf, msgBuf] = await sock.receive().catch(errorToMessage);
+    if (topicBuf.length === 0) {
       // intentionally closed
       break;
     }
+
+    let topic = topicBuf.toString("ascii");
     if (topic === "error") {
-      console.warn("[error] socket failed to receive", msg);
+      console.warn("[error] socket failed to receive", msgBuf);
       continue;
     }
 
     console.info(`[topic] ${topic}:`);
-    let hex = msg.toString("hex");
+    let hex = msgBuf.toString("hex");
     console.info(hex);
+
+    handler(null, topic, hex);
   }
 
   function errorToMessage(e) {
