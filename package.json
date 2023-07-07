@@ -10,16 +10,21 @@
   "keywords": [],
   "author": "",
   "license": "MIT",
-  "dependencies": {
-    "@dashevo/dashcore-node": "^6.2.3",
-    "@root/async-router": "^1.0.10",
+  "_dependencies": {
+    "@dashevo/dashcore-node": "^7.0.2",
     "@root/base58check": "^1.0.0",
-    "@root/request": "^1.8.1",
-    "base-x": "^3.0.9",
+    "base-x": "^3.0.9"
+  },
+  "dependencies": {
+    "@dashevo/dashd-rpc": "^18.2.0",
+    "@root/async-router": "^1.0.12",
+    "@root/request": "^1.9.2",
     "base62-token": "^1.1.1",
-    "body-parser": "^1.19.1",
-    "dotenv": "^16.0.0",
-    "express": "^4.17.2",
-    "zeromq": "^5.2.8"
+    "body-parser": "^1.20.2",
+    "dashkeys": "^1.0.0",
+    "dashtx": "^0.9.0",
+    "dotenv": "^16.3.1",
+    "express": "^4.18.2",
+    "zeromq": "^6.0.0-beta.17"
   }
 }

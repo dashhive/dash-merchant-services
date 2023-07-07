@@ -1,9 +1,7 @@
 "use strict";
 
 let request = require("./lib/request.js");
-let Base58Check = require("@root/base58check").Base58Check;
-
-let b58c = Base58Check.create();
+let DashKeys = require("dashkeys");
 
 let Hooks = module.exports;
 
@@ -35,7 +33,8 @@ Hooks.create = function ({ defaultWebhookTimeout = 5 * 1000, Db }) {
 
     let addr;
     try {
-      addr = await b58c.verify(data.address);
+      let b58cString = data.address;
+      addr = await DashKeys.decode(b58cString, { validate: true });
     } catch (e) {
       throw new Error("BAD_REQUEST: invalid dash address");
     }
@@ -123,13 +122,13 @@ Hooks.create = function ({ defaultWebhookTimeout = 5 * 1000, Db }) {
 
   //let msg = { event: evname, txid: tx.hash, satoshis: out.satoshis };
   hooks.send = async function (payaddr, { event, txid, satoshis, p2pkh }) {
-    let hook;
+    let _hooks;
     if (p2pkh) {
-      hook = await Db.getByPubKeyHash(p2pkh);
+      _hooks = await Db.getByPubKeyHash(p2pkh);
     } else {
-      hook = await Db.get(payaddr);
+      _hooks = await Db.get(payaddr);
     }
-    if (!hook) {
+    if (!_hooks?.length) {
       return;
     }
 
@@ -142,26 +141,30 @@ Hooks.create = function ({ defaultWebhookTimeout = 5 * 1000, Db }) {
     };
 
     console.info(`[${evname}] Target: ${out.satoshis} => ${payaddr}`);
-    //console.log("DEBUG", payaddr, { event, txid, satoshis, p2pkh });
-    //console.log("DEBUG hook", hook);
-    let req = {
-      timeout: defaultWebhookTimeout,
-      auth: {
-        username: hook.username,
-        password: hook.password,
-      },
-      url: hook.url,
-      json: {
-        txid: tx.hash,
-        event: evname,
-        instantsend: "txlock" === event,
-        address: hook.address,
-        // TODO duffs
-        satoshis: out.satoshis,
-      },
-    };
+    for (let hook of _hooks) {
+      //console.log("DEBUG", payaddr, { event, txid, satoshis, p2pkh });
+      //console.log("DEBUG hook", hook);
+      let req = {
+        timeout: defaultWebhookTimeout,
+        auth: {
+          username: hook.username,
+          password: hook.password,
+        },
+        url: hook.url,
+        json: {
+          txid: tx.hash,
+          event: evname,
+          instantsend: "txlock" === event,
+          address: hook.address,
+          // TODO duffs
+          satoshis: out.satoshis,
+        },
+      };
 
-    await request(req).then(function (resp) {
+      await request(req).then(onResp);
+    }
+
+    function onResp(resp) {
       if (resp.ok) {
         return resp;
       }
@@ -169,7 +172,7 @@ Hooks.create = function ({ defaultWebhookTimeout = 5 * 1000, Db }) {
       console.error(`[${evname}] not OK:`);
       console.error(resp.toJSON());
       throw new Error("bad response from webhook");
-    });
+    }
   };
 
   return hooks;

@@ -8,31 +8,38 @@ HooksDb.create = function ({ staleAge }) {
     staleAge = defaultStaleAge;
   }
 
-  let hooksDb = {};
-  let registeredAddresses = {};
-  hooksDb.getByPubKeyHash = async function (p2pkh) {
-    return registeredAddresses[p2pkh];
+  let db = {
+    _registeredAddresses: {},
+    _staleAge: staleAge,
   };
 
-  hooksDb.all = async function () {
-    return registeredAddresses;
+  db.getByPubKeyHash = async function (p2pkh) {
+    return db._registeredAddresses[p2pkh];
   };
 
-  hooksDb.set = async function (hook) {
-    // XXX BUG TODO
-    // Note: we can only have one webhook per address this way:
-    registeredAddresses[hook.pubKeyHash] = hook;
+  db.all = async function () {
+    return db._registeredAddresses;
   };
 
-  hooksDb.cleanup = async function () {
-    let freshtime = Date.now() - staleAge;
-    Object.keys(registeredAddresses).forEach(function (key) {
-      if (registeredAddresses[key].ts > freshtime) {
+  db.set = async function (hook) {
+    if (!db._registeredAddresses[hook.pubKeyHash]) {
+      db._registeredAddresses[hook.pubKeyHash] = [];
+    }
+
+    db._registeredAddresses[hook.pubKeyHash].push(hook);
+  };
+
+  db.cleanup = async function () {
+    let freshtime = Date.now() - db._staleAge;
+    let keys = Object.keys(db._registeredAddresses);
+    keys.forEach(function (key) {
+      if (db._registeredAddresses[key].ts > freshtime) {
         return;
       }
-      console.log("[DEBUG] delete", registeredAddresses[key]);
-      delete registeredAddresses[key];
+      console.log("[DEBUG] delete", db._registeredAddresses[key]);
+      delete db._registeredAddresses[key];
     });
   };
-  return hooksDb;
+
+  return db;
 };
