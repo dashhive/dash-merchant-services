@@ -93,7 +93,7 @@ initRpc();
 
 void Events.create({
   url: process.env.DASHD_ZMQ_URL,
-  handler: createTxListener("rawtxlock"),
+  handler: createTxListener(),
 });
 
 let parses = Promise.resolve();
@@ -105,10 +105,14 @@ function createTxListener(evname) {
     }
 
     let typename = type.toString();
-    if (typename !== evname) {
-      console.info(
-        `[monitor] ${type} (${typeof type}) !== ${evname} (${typeof evname})`
-      );
+
+    if (typename === "pubhashchainlock") {
+      console.info(`[monitor] ${type}: TODO clear double-old rawtxlock utxos`);
+      return;
+    }
+
+    if (typename !== "rawtxlock") {
+      console.info(`[monitor] ${type}`);
       return;
     }
 

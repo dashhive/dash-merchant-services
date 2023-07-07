@@ -15,7 +15,10 @@ Events.create = async function create({ url, handler }) {
   console.info("[connect]");
 
   sock.subscribe("rawtxlock");
-  console.info("[subscribe]");
+  console.log("[subscribe] rawtxlock");
+
+  sock.subscribe("pubhashchainlock");
+  console.log("[subscribe] pubhashchainlock");
 
   // receive() is in c++ land
   // https://github.com/zeromq/zeromq.js/blob/62f6e252f530ea05c86be15b06a58214eac1b34d/src/socket.cc#L307
@@ -50,7 +53,6 @@ Events.create = async function create({ url, handler }) {
 
     console.info(`[topic] ${topic}:`);
     let hex = msgBuf.toString("hex");
-    console.info(hex);
 
     handler(null, topic, hex);
   }
