@@ -106,7 +106,7 @@ function createTxListener(evname) {
 
     let typename = type.toString();
 
-    if (typename === "pubhashchainlock") {
+    if (typename === "hashchainlock") {
       console.info(`[monitor] ${type}: TODO clear double-old rawtxlock utxos`);
       return;
     }

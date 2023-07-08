@@ -17,8 +17,17 @@ Events.create = async function create({ url, handler }) {
   sock.subscribe("rawtxlock");
   console.log("[subscribe] rawtxlock");
 
-  sock.subscribe("pubhashchainlock");
-  console.log("[subscribe] pubhashchainlock");
+  sock.subscribe("hashblock");
+  console.log("[subscribe] hashblock");
+
+  sock.subscribe("hashchainlock");
+  console.log("[subscribe] hashchainlock");
+
+  sock.subscribe("rawblock");
+  console.log("[subscribe] rawblock");
+
+  sock.subscribe("rawchainlock");
+  console.log("[subscribe] rawchainlock");
 
   // receive() is in c++ land
   // https://github.com/zeromq/zeromq.js/blob/62f6e252f530ea05c86be15b06a58214eac1b34d/src/socket.cc#L307
