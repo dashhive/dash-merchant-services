@@ -121,7 +121,8 @@ function createTxListener(evname) {
 
     parses = parses
       .then(async function () {
-        await DashTx.parse(value);
+        let txInfo = await DashTx.parse(value);
+        console.info(txInfo);
       })
       .catch(function () {
         console.warn("ignoring script that could not be parsed");
