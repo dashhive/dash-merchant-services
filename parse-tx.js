@@ -163,7 +163,7 @@ Tx.parse = async function (hex) {
       // let sValuePad = sValue.padStart(66, " ");
       // console.info(`    ${sValuePad}`);
 
-      input.signature = `${asn1Seq}.${asn1Bytes}.${rTypeHex}.${rSizeHex}.${rValue}.${sTypeHex}.${sSizeHex}.${sValue}`;
+      input.signature = `${asn1Seq}${asn1Bytes}${rTypeHex}${rSizeHex}${rValue}${sTypeHex}${sSizeHex}${sValue}`;
 
       let sigHashTypeHex = input.script.substr(sIndex, 2);
       input.sigHashType = parseInt(sigHashTypeHex, 16);
