@@ -2,6 +2,8 @@
 
 let HooksDb = module.exports;
 
+let ULID = require("ulid");
+
 let defaultStaleAge = 15 * 60 * 1000;
 HooksDb.create = function ({ staleAge }) {
   if (!staleAge) {
@@ -9,36 +11,74 @@ HooksDb.create = function ({ staleAge }) {
   }
 
   let db = {
-    _registeredAddresses: {},
+    _registeredHooks: {},
+    _registeredPkhs: {},
     _staleAge: staleAge,
   };
 
-  db.getByPubKeyHash = async function (p2pkh) {
-    return db._registeredAddresses[p2pkh];
-  };
+  db.getByPkhs = async function (pkhs) {
+    let hooksMap = {};
 
-  db.all = async function () {
-    return db._registeredAddresses;
-  };
+    for (let pkh of pkhs) {
+      let ulids = db._registeredPkhs[pkh]?.hookUlids;
+      if (!ulids?.length) {
+        continue;
+      }
 
-  db.set = async function (hook) {
-    if (!db._registeredAddresses[hook.pubKeyHash]) {
-      db._registeredAddresses[hook.pubKeyHash] = [];
+      for (let ulid of ulids) {
+        let hook = db._registeredHooks[ulid];
+        hooksMap[ulid] = hook;
+      }
     }
 
-    db._registeredAddresses[hook.pubKeyHash].push(hook);
+    let hooks = Object.values(hooksMap);
+    return hooks;
+  };
+
+  // db.all = async function () {
+  //   return db._registeredPkhs;
+  // };
+
+  db.set = async function (hook, pkhs) {
+    let ulid = hook.ulid || ULID.ulid();
+    let now = hook.now || Date.now();
+    db._registeredHooks[ulid] = hook;
+
+    for (let pkh of pkhs) {
+      await db._setPkh(ulid, pkh, now);
+    }
+  };
+
+  db._setPkh = async function (ulid, pubKeyHash, now) {
+    if (!db._registeredPkhs[pubKeyHash]) {
+      db._registeredPkhs[pubKeyHash] = { ts: 0, hookUlids: [] };
+    }
+    db._registeredPkhs[pubKeyHash].ts = now;
+    db._registeredPkhs[pubKeyHash].hookUlids.push(ulid);
   };
 
   db.cleanup = async function () {
     let freshtime = Date.now() - db._staleAge;
-    let keys = Object.keys(db._registeredAddresses);
-    keys.forEach(function (key) {
-      if (db._registeredAddresses[key].ts > freshtime) {
+
+    let pkhs = Object.keys(db._registeredPkhs);
+    for (let pkh of pkhs) {
+      if (db._registeredPkhs[pkh].ts > freshtime) {
         return;
       }
-      console.log("[DEBUG] delete", db._registeredAddresses[key]);
-      delete db._registeredAddresses[key];
-    });
+
+      console.log("[DEBUG] delete pubKeyHash", db._registeredPkhs[pkh]);
+      delete db._registeredPkhs[pkh];
+    }
+
+    let ulids = Object.keys(db._registeredHooks);
+    for (let ulid of ulids) {
+      if (db._registeredHooks[ulid].ts > freshtime) {
+        return;
+      }
+
+      console.log("[DEBUG] delete hook", db._registeredHooks[ulid]);
+      delete db._registeredHooks[ulid];
+    }
   };
 
   return db;

@@ -119,50 +119,26 @@ function createTxListener(evname) {
     console.info(`[monitor] ${type}:`);
     console.info(value);
 
+    let txInfo;
     parses = parses
       .then(async function () {
-        let txInfo = await DashTx.parse(value);
-        console.info(txInfo);
+        txInfo = await DashTx.parse(value);
       })
       .catch(function () {
         console.warn("ignoring script that could not be parsed");
       });
     await parses;
+    console.log(`[DEBUG] txInfo`, txInfo);
 
-    // a new transaction has entered the mempool
-    //console.log("txData", txData);
-    //let tx = DashTx.new dashcore.lib.Transaction(txData);
+    let pkhs = [];
+    for (let output of txInfo.outputs) {
+      pkhs.push(output.pubKeyHash);
+    }
 
-    //let json = JSON.stringify(tx, null, 2);
-    //console.log(`DEBUG [${evname}] tx:`, json);
-
-    //tx.outputs.some(async function (output) {
-    //  let out = output.toJSON();
-
-    //  let script = out.script.toString();
-    //  let p2pkh;
-    //  try {
-    //    p2pkh = Script.parsePubKeyHash(script);
-    //  } catch (e) {
-    //    return;
-    //  }
-
-    //  let payAddr = await b58c.encode({
-    //    version: `4c`,
-    //    pubKeyHash: p2pkh,
-    //  });
-    //  //console.log(`[${evname}] DEBUG: ${out.satoshis} => ${payAddr}`);
-
-    //  await Hooks.send(payAddr, {
-    //    event: evname,
-    //    txid: tx.hash,
-    //    satoshis: out.satoshis,
-    //    p2pkh,
-    //  }).catch(function (e) {
-    //    console.error(`[${evname}] Webhook Failed:`);
-    //    console.error(e.message || e.stack);
-    //  });
-    //});
+    await Hooks.send(typename, txInfo, pkhs).catch(function (e) {
+      console.error(`[${evname}] Webhook Failed:`);
+      console.error(e.message || e.stack);
+    });
 
     // TODO calc the fee just for fun
     // fee = sum(inputs) - sum(outputs)

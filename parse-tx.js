@@ -5,7 +5,7 @@
 let Tx = require("dashtx");
 module.export = Tx;
 
-let DashKeys = require("dashkeys");
+//let DashKeys = require("dashkeys");
 
 Tx.parse = async function (hex) {
   // This is a rare exception where breaking this down further
@@ -247,9 +247,9 @@ Tx.parse = async function (hex) {
     // console.info("   ", output.script.slice(0, 4), "                 # Script");
     // console.info("   ", output.script.slice(4, 6));
     let pkhHex = output.script.slice(6, 46);
-    let pkhBytes = DashKeys.utils.hexToBytes(pkhHex);
     output.pubKeyHash = pkhHex;
-    output.address = await DashKeys.pkhToAddr(pkhBytes);
+    //let pkhBytes = DashKeys.utils.hexToBytes(pkhHex);
+    //output.address = await DashKeys.pkhToAddr(pkhBytes);
     // console.info(
     //   "   ",
     //   output.script.slice(6, 26),
