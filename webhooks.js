@@ -139,7 +139,7 @@ Hooks.create = function ({ defaultWebhookTimeout = 5 * 1000, Db }) {
   hooks.send = async function (event, txInfo, pubKeyHashes) {
     let evname = event;
 
-    let _hooks = await Db.getByPubKeyHashes(pubKeyHashes);
+    let _hooks = await Db.getByPkhs(pubKeyHashes);
     if (!_hooks?.length) {
       return;
     }
