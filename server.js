@@ -128,6 +128,10 @@ function createTxListener(evname) {
         console.warn("ignoring script that could not be parsed");
       });
     await parses;
+    if (!txInfo) {
+      return;
+    }
+
     console.log(`[DEBUG] txInfo`, txInfo);
 
     let pkhs = [];
