@@ -264,7 +264,8 @@ Tx.parse = async function (hex) {
 
   // TODO reverse
   let locktimeHex = hex.substr(next, 8);
-  tx.locktime = parseInt(locktimeHex.slice(0, 2));
+  locktimeHex = Tx.utils.reverseHex(locktimeHex);
+  tx.locktime = parseInt(locktimeHex, 16);
   next += 8;
   // console.info(`${locktimeHex}                  # LOCKTIME (${tx.locktime})`);
   // console.info();
