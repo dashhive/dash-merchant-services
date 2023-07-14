@@ -151,12 +151,13 @@ Hooks.create = function ({ defaultWebhookTimeout = 5 * 1000, Db }) {
       let addresses = [];
       let satoshis = 0;
       // TODO submitting a duplicate pkh results in incorrect calculation
-      for (let pkh of hook.pubKeyHashes) {
+      for (let pkh of hook._pubKeyHashes) {
         for (let output of txInfo.outputs) {
           if (pkh !== output.pubKeyHash) {
             continue;
           }
-          let address = await DashKeys.encode(pkh);
+          let pkhBytes = DashKeys.utils.hexToBytes(pkh);
+          let address = await DashKeys.pkhToAddr(pkhBytes);
           addresses.push(address);
           pubKeyHashes.push(pkh);
           satoshis += output.satoshis;
@@ -168,7 +169,8 @@ Hooks.create = function ({ defaultWebhookTimeout = 5 * 1000, Db }) {
         event: evname,
         transaction: txInfo,
         instantsend: ["txlock", "rawtxlock"].includes(event),
-        pubKeyHashes: hook.address,
+        _pubKeyHashes: hook._pubKeyHashes,
+        addresses: addresses,
         satoshis: satoshis,
       };
       let req = {
