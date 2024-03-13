@@ -56,6 +56,7 @@ let rpcConfig = {
   host: dashdConf.rpchost || "127.0.0.1", // "10.11.5.101",
   // mainnet=9998, testnet=19998, regtest=19898
   port: dashdConf.rpcport || 9998,
+  timeout: 10 * 1000, // bump default from 5s to 10s for up to 10k addresses
 };
 let rpc = new RpcClient(rpcConfig);
 
@@ -112,7 +113,7 @@ function createTxListener(evname) {
     }
 
     if (typename !== "rawtxlock") {
-      console.info(`[monitor] ${type}`);
+      console.info(`[monitor] ${type} (x)`);
       return;
     }
 
@@ -171,34 +172,90 @@ function auth(req, res, next) {
   next();
 }
 
+// JSON.parse is not as efficient as you'd hope, so size matters
 app.use("/api", bodyParser.json({ limit: "100kb", strict: true }));
 app.post("/api/webhooks", auth, Hooks.register);
+
+async function getAddressInfo(addresses) {
+  // getaddressbalance
+  let balances = await rpc.getAddressBalance({
+    addresses: addresses,
+  });
+
+  // getaddressutxos
+  let utxos = await rpc.getAddressUtxos({
+    addresses: addresses,
+  });
+
+  // getaddressmempool + gettxchainlocks
+  let mempool = await rpc.getAddressMempool({
+    addresses: addresses,
+  });
+
+  let chainlocks = [];
+  let memTxids = [];
+  for (let entry of mempool.result) {
+    console.log("[DEBUG-RPC] mem entry");
+    console.log(entry);
+    memTxids.push(entry.txid);
+  }
+  if (memTxids.length) {
+    console.log("[DEBUG-RPC] memTxids");
+    console.log(memTxids);
+    //chainlocks = await rpc.gettxchainlocks({ txids: memTxids });
+    chainlocks = await rpc.gettxchainlocks(memTxids);
+  }
+
+  // getaddressdeltas
+  let deltas = await rpc.getAddressDeltas({
+    addresses: addresses,
+  });
+
+  // getaddresstxids
+  let txids = await rpc.getAddressTxids({
+    addresses: addresses,
+  });
+  if (chainlocks.length === 0) {
+    let memTxids = [];
+    for (let txid of txids.result) {
+      console.log("[DEBUG-RPC] tx entry");
+      console.log(txid);
+      memTxids.push(txid);
+    }
+    console.log("[DEBUG-RPC] tx memTxids");
+    console.log(memTxids);
+    chainlocks = await rpc.gettxchainlocks(memTxids);
+    //chainlocks = await rpc.gettxchainlocks({ txids: memTxids });
+  }
+
+  // GetTxChainlocks
+
+  return { utxos, balances, mempool, chainlocks, txids, deltas };
+}
 
 app.get("/api/utxos", async function (req, res) {
   let addressesStr = req.query.addresses || "";
   addressesStr = addressesStr.trim();
 
-  let addresses = addressesStr.split(",");
+  let addresses = addressesStr.split(/[, ]+/);
   if (!addressesStr) {
     addresses = [];
   }
 
-  // getaddressbalance
-  // getaddressutxos
-  let ret = await rpc.getAddressUtxos({
-    addresses: addresses,
-  });
-  res.json(ret);
+  let info = await getAddressInfo(addresses);
+
+  res.json(info);
 });
 
 app.post("/api/utxos", async function (req, res) {
   let addresses = req.body?.addresses || [];
   // TODO validate address string length
 
-  let ret = await rpc.getAddressUtxos({
-    addresses: addresses,
-  });
-  res.json(ret);
+  console.log(`addresses.length: ${addresses.length}`);
+
+  let info = await getAddressInfo(addresses);
+
+  res.json(info);
 });
 
 app.get("/api/mnlist", rListServiceNodes);
