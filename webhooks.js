@@ -1,11 +1,9 @@
 "use strict";
 
-let request = require("./lib/request.js");
-let Base58Check = require("@root/base58check").Base58Check;
-
-let b58c = Base58Check.create();
-
 let Hooks = module.exports;
+
+let request = require("./lib/request.js");
+let DashKeys = require("dashkeys");
 
 Hooks.create = function ({ defaultWebhookTimeout = 5 * 1000, Db }) {
   let hooks = {};
@@ -13,8 +11,12 @@ Hooks.create = function ({ defaultWebhookTimeout = 5 * 1000, Db }) {
   hooks.register = async function (req, res) {
     let data = {
       url: req.body.url,
-      address: req.body.address,
+      addresses: req.body.addresses,
     };
+    if (!data.addresses) {
+      data.addresses = [req.body.address];
+    }
+
     let webhookUrl = req.body.url;
     // TODO
     let account = req.account;
@@ -33,11 +35,14 @@ Hooks.create = function ({ defaultWebhookTimeout = 5 * 1000, Db }) {
       throw new Error(`BAD_REQUEST: insecure webhook url '${url.protocol}'`);
     }
 
-    let addr;
-    try {
-      addr = await b58c.verify(data.address);
-    } catch (e) {
-      throw new Error("BAD_REQUEST: invalid dash address");
+    let addrInfos = [];
+    for (let address of data.addresses) {
+      try {
+        let addrInfo = await DashKeys.decode(address, { validate: true });
+        addrInfos.push(addrInfo);
+      } catch (e) {
+        throw new Error("BAD_REQUEST: could not decode Dash address");
+      }
     }
 
     // fn: test that valid auth succeeds
@@ -57,6 +62,7 @@ Hooks.create = function ({ defaultWebhookTimeout = 5 * 1000, Db }) {
       },
       json: {
         address: data.address,
+        addresses: data.addresses,
         satoshis: 0,
       },
     })
@@ -95,16 +101,24 @@ Hooks.create = function ({ defaultWebhookTimeout = 5 * 1000, Db }) {
       }
     });
 
-    await Db.set({
-      ts: Date.now(),
-      address: data.address,
-      pubKeyHash: addr.pubKeyHash,
+    let now = Date.now();
+    let pkhs = [];
+    for (let addrInfo of addrInfos) {
+      pkhs.push(addrInfo.pubKeyHash);
+    }
+    let hook = {
+      ts: now,
+      _pubKeyHashes: pkhs,
       username: url.username,
       password: url.password,
       url: data.url,
-    });
-    let all = await Db.all();
-    console.log("DEBUG", addr.pubKeyHash, all);
+    };
+    await Db.set(hook, pkhs);
+
+    // address: data.address,
+    // pubKeyHash: addrInfo.pubKeyHash,
+    //let all = await Db.all();
+    //console.log("DEBUG", addrInfo.pubKeyHash, all);
 
     if (url.password) {
       let prefix = url.password.slice(0, 4);
@@ -122,46 +136,56 @@ Hooks.create = function ({ defaultWebhookTimeout = 5 * 1000, Db }) {
   };
 
   //let msg = { event: evname, txid: tx.hash, satoshis: out.satoshis };
-  hooks.send = async function (payaddr, { event, txid, satoshis, p2pkh }) {
-    let hook;
-    if (p2pkh) {
-      hook = await Db.getByPubKeyHash(p2pkh);
-    } else {
-      hook = await Db.get(payaddr);
-    }
-    if (!hook) {
+  hooks.send = async function (event, txInfo, pubKeyHashes) {
+    let evname = event;
+
+    let _hooks = await Db.getByPkhs(pubKeyHashes);
+    if (!_hooks?.length) {
       return;
     }
 
-    let evname = event;
-    let out = {
-      satoshis: satoshis,
-    };
-    let tx = {
-      hash: txid,
-    };
+    // payaddr,
+    // { event, txid, satoshis, pubKeyHash }
+    for (let hook of _hooks) {
+      let pubKeyHashes = [];
+      let addresses = [];
+      let satoshis = 0;
+      // TODO submitting a duplicate pkh results in incorrect calculation
+      for (let pkh of hook._pubKeyHashes) {
+        for (let output of txInfo.outputs) {
+          if (pkh !== output.pubKeyHash) {
+            continue;
+          }
+          let pkhBytes = DashKeys.utils.hexToBytes(pkh);
+          let address = await DashKeys.pkhToAddr(pkhBytes);
+          addresses.push(address);
+          pubKeyHashes.push(pkh);
+          satoshis += output.satoshis;
+        }
+      }
+      console.info(`[${evname}] Target: ${satoshis} => ${hook.nonce}`);
 
-    console.info(`[${evname}] Target: ${out.satoshis} => ${payaddr}`);
-    //console.log("DEBUG", payaddr, { event, txid, satoshis, p2pkh });
-    //console.log("DEBUG hook", hook);
-    let req = {
-      timeout: defaultWebhookTimeout,
-      auth: {
-        username: hook.username,
-        password: hook.password,
-      },
-      url: hook.url,
-      json: {
-        txid: tx.hash,
+      let data = {
         event: evname,
-        instantsend: "txlock" === event,
-        address: hook.address,
-        // TODO duffs
-        satoshis: out.satoshis,
-      },
-    };
+        transaction: txInfo,
+        instantsend: ["txlock", "rawtxlock"].includes(event),
+        _pubKeyHashes: hook._pubKeyHashes,
+        addresses: addresses,
+        satoshis: satoshis,
+      };
+      let req = {
+        timeout: defaultWebhookTimeout,
+        auth: {
+          username: hook.username,
+          password: hook.password,
+        },
+        url: hook.url,
+        json: data,
+      };
+      await request(req).then(onResp);
+    }
 
-    await request(req).then(function (resp) {
+    function onResp(resp) {
       if (resp.ok) {
         return resp;
       }
@@ -169,7 +193,7 @@ Hooks.create = function ({ defaultWebhookTimeout = 5 * 1000, Db }) {
       console.error(`[${evname}] not OK:`);
       console.error(resp.toJSON());
       throw new Error("bad response from webhook");
-    });
+    }
   };
 
   return hooks;
